@@ -5883,6 +5883,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
+ "which",
 ]
 
 [[package]]

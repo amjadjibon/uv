@@ -2861,6 +2861,28 @@ fn init_vcs_none() {
     child.child(".git").assert(predicate::path::missing());
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn init_vcs_jj() {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+
+    uv_snapshot!(context.filters(), context.init().arg(child.as_ref()).arg("--vcs").arg("jj"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    child.child(".gitignore").assert(predicate::path::exists());
+    child.child(".jj").assert(predicate::path::is_dir());
+    // Jujutsu creates a colocated .git directory by default with `jj git init`
+    child.child(".git").assert(predicate::path::is_dir());
+}
+
 /// Run `uv init` from within a Git repository. Do not try to reinitialize one.
 #[test]
 #[cfg(feature = "git")]
@@ -2925,6 +2947,24 @@ fn init_git_not_installed() {
 
     ----- stderr -----
     error: Attempted to initialize a Git repository, but `git` was not found in PATH
+    "###);
+}
+
+#[test]
+fn init_jj_not_installed() {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+
+    // With explicit `--vcs jj`, `uv init` will fail if jj is not in PATH.
+    // Set `PATH` to child to make `jj` command cannot be found.
+    uv_snapshot!(context.filters(), context.init().env(EnvVars::PATH, &*child).arg(child.as_ref()).arg("--vcs").arg("jj"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Attempted to initialize a Jujutsu repository, but `jj` was not found in PATH
     "###);
 }
 

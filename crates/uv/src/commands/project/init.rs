@@ -13,7 +13,8 @@ use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
+    DependencyGroupsWithDefaults, JJ, ProjectBuildBackend, VersionControlError,
+    VersionControlSystem,
 };
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
@@ -1332,6 +1333,52 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     }
 }
 
+#[derive(Debug, Clone)]
+enum JjDiscoveryResult {
+    /// Jujutsu is initialized at the path.
+    Repository,
+    /// Jujutsu is not initialized at the path.
+    NoRepository,
+    /// There is no `jj[.exe]` binary in PATH.
+    NoJj,
+    /// There is a `jj[.exe]` binary in PATH, but it returned an unexpected output.
+    BrokenJj,
+}
+
+/// Checks if there is a Jujutsu repository at the given path.
+fn detect_jj_repository(path: &Path) -> JjDiscoveryResult {
+    // Determine whether the path is inside a Jujutsu repository.
+    let Ok(jj) = JJ.as_ref() else {
+        return JjDiscoveryResult::NoJj;
+    };
+    let Ok(output) = Command::new(jj)
+        .arg("root")
+        .env(EnvVars::LC_ALL, "C")
+        .current_dir(path)
+        .output()
+    else {
+        debug!("`jj root` failed to launch for `{}`", path.display());
+        return JjDiscoveryResult::BrokenJj;
+    };
+    if output.status.success() {
+        debug!("Found a Jujutsu repository for `{}`", path.display());
+        JjDiscoveryResult::Repository
+    } else {
+        let stderr = std::str::from_utf8(&output.stderr).unwrap_or("");
+        if stderr.contains("There is no jj repo") || stderr.contains("not a jj repo") {
+            debug!("Not a Jujutsu repository `{}`", path.display());
+            JjDiscoveryResult::NoRepository
+        } else {
+            debug!(
+                "`jj root` failed but didn't contain expected error message in stderr for `{}`",
+                path.display()
+            );
+            trace!("`jj root` stderr: {:?}", stderr);
+            JjDiscoveryResult::BrokenJj
+        }
+    }
+}
+
 /// Initialize the version control system at the given path, if applicable.
 fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
     // vcs is None for an existing repository because we don't want to initialize again.
@@ -1351,6 +1398,15 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
             | GitDiscoveryResult::BrokenGit
             | GitDiscoveryResult::NoGit => (VersionControlSystem::Git, false),
             GitDiscoveryResult::Repository => (VersionControlSystem::None, false),
+        },
+        // The user requested Jujutsu explicitly, so the only reason not to invoke it is that Jujutsu is
+        // already initialized. In case of an error (broken jj), we will raise the real error
+        // when trying to initialize, which should give us a better error message.
+        Some(VersionControlSystem::Jj) => match detect_jj_repository(path) {
+            JjDiscoveryResult::NoRepository
+            | JjDiscoveryResult::BrokenJj
+            | JjDiscoveryResult::NoJj => (VersionControlSystem::Jj, false),
+            JjDiscoveryResult::Repository => (VersionControlSystem::None, false),
         },
     };
 
