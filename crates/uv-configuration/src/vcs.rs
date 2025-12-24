@@ -1,18 +1,10 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::LazyLock;
 
 use serde::Deserialize;
 use uv_git::GIT;
-
-/// A global cache of the result of `which jj`.
-pub static JJ: LazyLock<Result<PathBuf, VersionControlError>> = LazyLock::new(|| {
-    which::which("jj").map_err(|err| match err {
-        which::Error::CannotFindBinaryPath => VersionControlError::JjNotInstalled,
-        err => VersionControlError::Other(err),
-    })
-});
+use uv_jj::JJ;
 
 #[derive(Debug, thiserror::Error)]
 pub enum VersionControlError {
@@ -28,8 +20,6 @@ pub enum VersionControlError {
     JjInit(PathBuf, String, String),
     #[error("`jj` command failed")]
     JjCommand(#[source] std::io::Error),
-    #[error(transparent)]
-    Other(#[from] which::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -89,8 +79,9 @@ impl VersionControlSystem {
                 Ok(())
             }
             Self::Jj => {
-                let Ok(jj) = JJ.as_ref() else {
-                    return Err(VersionControlError::JjNotInstalled);
+                let jj = match JJ.as_ref() {
+                    Ok(jj) => jj,
+                    Err(_) => return Err(VersionControlError::JjNotInstalled),
                 };
 
                 let output = Command::new(jj)

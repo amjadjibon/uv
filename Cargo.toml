@@ -37,6 +37,7 @@ uv-flags = { version = "0.0.8", path = "crates/uv-flags" }
 uv-fs = { version = "0.0.8", path = "crates/uv-fs", features = ["serde", "tokio"] }
 uv-git = { version = "0.0.8", path = "crates/uv-git" }
 uv-git-types = { version = "0.0.8", path = "crates/uv-git-types" }
+uv-jj = { version = "0.0.8", path = "crates/uv-jj" }
 uv-globfilter = { version = "0.0.8", path = "crates/uv-globfilter" }
 uv-install-wheel = { version = "0.0.8", path = "crates/uv-install-wheel", default-features = false }
 uv-installer = { version = "0.0.8", path = "crates/uv-installer" }

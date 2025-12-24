@@ -13,12 +13,12 @@ use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    DependencyGroupsWithDefaults, JJ, ProjectBuildBackend, VersionControlError,
-    VersionControlSystem,
+    DependencyGroupsWithDefaults, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
 use uv_distribution_types::RequiresPython;
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
+use uv_jj::JJ;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
@@ -1348,8 +1348,9 @@ enum JjDiscoveryResult {
 /// Checks if there is a Jujutsu repository at the given path.
 fn detect_jj_repository(path: &Path) -> JjDiscoveryResult {
     // Determine whether the path is inside a Jujutsu repository.
-    let Ok(jj) = JJ.as_ref() else {
-        return JjDiscoveryResult::NoJj;
+    let jj = match JJ.as_ref() {
+        Ok(jj) => jj,
+        Err(_) => return JjDiscoveryResult::NoJj,
     };
     let Ok(output) = Command::new(jj)
         .arg("root")

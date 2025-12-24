@@ -5488,6 +5488,7 @@ dependencies = [
  "uv-git-types",
  "uv-install-wheel",
  "uv-installer",
+ "uv-jj",
  "uv-logging",
  "uv-normalize",
  "uv-pep440",
@@ -5878,12 +5879,12 @@ dependencies = [
  "uv-cache-info",
  "uv-distribution-types",
  "uv-git",
+ "uv-jj",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
- "which",
 ]
 
 [[package]]
@@ -6287,6 +6288,14 @@ dependencies = [
  "uv-types",
  "uv-warnings",
  "walkdir",
+]
+
+[[package]]
+name = "uv-jj"
+version = "0.0.8"
+dependencies = [
+ "thiserror 2.0.17",
+ "which",
 ]
 
 [[package]]
