@@ -35,9 +35,9 @@ uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
+uv-jj = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
-uv-jj = { workspace = true }
 uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }

@@ -1383,22 +1383,34 @@ fn detect_jj_repository(path: &Path) -> JjDiscoveryResult {
 /// Initialize the version control system at the given path, if applicable.
 fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
     // vcs is None for an existing repository because we don't want to initialize again.
-    let (vcs, implicit) = match vcs {
+    let (vcs, implicit, colocate_with_git) = match vcs {
         None => match detect_git_repository(path) {
-            GitDiscoveryResult::NoRepository => (VersionControlSystem::Git, true),
+            GitDiscoveryResult::NoRepository => (VersionControlSystem::Git, true, false),
             GitDiscoveryResult::Repository
             | GitDiscoveryResult::NoGit
-            | GitDiscoveryResult::BrokenGit => (VersionControlSystem::None, false),
+            | GitDiscoveryResult::BrokenGit => (VersionControlSystem::None, false, false),
         },
-        Some(VersionControlSystem::None) => (VersionControlSystem::None, false),
+        Some(VersionControlSystem::None) => (VersionControlSystem::None, false, false),
         // The user requested Git explicitly, so the only reason not to invoke it is that Git is
         // already initialized. In case of an error (broken git), we will raise the real error
         // when trying to initialize, which should give us a better error message.
         Some(VersionControlSystem::Git) => match detect_git_repository(path) {
             GitDiscoveryResult::NoRepository
             | GitDiscoveryResult::BrokenGit
-            | GitDiscoveryResult::NoGit => (VersionControlSystem::Git, false),
-            GitDiscoveryResult::Repository => (VersionControlSystem::None, false),
+            | GitDiscoveryResult::NoGit => {
+                // Check if jj is already initialized (since jj creates .git too)
+                if matches!(detect_jj_repository(path), JjDiscoveryResult::Repository) {
+                    warn!(
+                        "A Jujutsu repository is already initialized at `{}`. \
+                        Jujutsu creates a colocated Git repository, so Git is already available.",
+                        path.display()
+                    );
+                    (VersionControlSystem::None, false, false)
+                } else {
+                    (VersionControlSystem::Git, false, false)
+                }
+            }
+            GitDiscoveryResult::Repository => (VersionControlSystem::None, false, false),
         },
         // The user requested Jujutsu explicitly, so the only reason not to invoke it is that Jujutsu is
         // already initialized. In case of an error (broken jj), we will raise the real error
@@ -1406,13 +1418,24 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
         Some(VersionControlSystem::Jj) => match detect_jj_repository(path) {
             JjDiscoveryResult::NoRepository
             | JjDiscoveryResult::BrokenJj
-            | JjDiscoveryResult::NoJj => (VersionControlSystem::Jj, false),
-            JjDiscoveryResult::Repository => (VersionControlSystem::None, false),
+            | JjDiscoveryResult::NoJj => {
+                // Check if git is already initialized (but not jj)
+                let has_git = matches!(detect_git_repository(path), GitDiscoveryResult::Repository);
+                if has_git {
+                    // Git exists but not jj - we'll initialize jj with --colocate
+                    debug!(
+                        "Git repository detected at `{}`. Initializing Jujutsu with --colocate flag.",
+                        path.display()
+                    );
+                }
+                (VersionControlSystem::Jj, false, has_git)
+            }
+            JjDiscoveryResult::Repository => (VersionControlSystem::None, false, false),
         },
     };
 
     // Attempt to initialize the VCS.
-    match vcs.init(path) {
+    match vcs.init(path, colocate_with_git) {
         Ok(()) => Ok(()),
         // If the VCS isn't installed, only raise an error if a VCS was explicitly specified.
         Err(err @ VersionControlError::GitNotInstalled) if implicit => {

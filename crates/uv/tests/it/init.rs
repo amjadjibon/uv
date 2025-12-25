@@ -2968,6 +2968,86 @@ fn init_jj_not_installed() {
     "###);
 }
 
+/// Test initializing jj in an existing git repository (cross-VCS scenario)
+#[test]
+#[cfg(feature = "git")]
+fn init_jj_in_git_repo() {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all().unwrap();
+
+    // First, initialize a git repository
+    Command::new("git")
+        .arg("init")
+        .current_dir(&child)
+        .assert()
+        .success();
+
+    // Verify .git exists but not .jj
+    child.child(".git").assert(predicate::path::is_dir());
+    child.child(".jj").assert(predicate::path::missing());
+
+    // Now try to initialize jj in the existing git repo
+    // This should use the --colocate flag
+    uv_snapshot!(context.filters(), context.init().arg(child.as_ref()).arg("--vcs").arg("jj"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    // Both .git and .jj should now exist (colocated repo)
+    child.child(".git").assert(predicate::path::is_dir());
+    child.child(".jj").assert(predicate::path::is_dir());
+    child.child(".gitignore").assert(predicate::path::exists());
+}
+
+/// Test that requesting git when jj already exists shows a warning
+#[test]
+#[cfg(feature = "git")]
+fn init_git_in_jj_repo() {
+    use std::process::Command;
+
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all().unwrap();
+
+    // Check if jj is available, skip test if not
+    if Command::new("jj").arg("--version").output().is_err() {
+        eprintln!("Skipping test: jj not installed");
+        return;
+    }
+
+    // First, initialize a jj repository (which creates both .jj and .git)
+    Command::new("jj")
+        .arg("git")
+        .arg("init")
+        .current_dir(&child)
+        .assert()
+        .success();
+
+    // Verify both .git and .jj exist
+    child.child(".git").assert(predicate::path::is_dir());
+    child.child(".jj").assert(predicate::path::is_dir());
+
+    // Now try to explicitly request git init
+    // This should detect jj and skip with a warning
+    context
+        .init()
+        .arg(child.as_ref())
+        .arg("--vcs")
+        .arg("git")
+        .assert()
+        .success();
+
+    // .jj should still exist (not overwritten)
+    child.child(".jj").assert(predicate::path::is_dir());
+}
+
 #[test]
 fn init_with_author() {
     let context = TestContext::new("3.12");

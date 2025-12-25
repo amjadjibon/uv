@@ -41,7 +41,10 @@ pub enum VersionControlSystem {
 
 impl VersionControlSystem {
     /// Initializes the VCS system based on the provided path.
-    pub fn init(&self, path: &Path) -> Result<(), VersionControlError> {
+    ///
+    /// For Jujutsu, if `colocate_with_git` is true, it will initialize in an existing
+    /// Git repository using the `--colocate` flag.
+    pub fn init(&self, path: &Path, colocate_with_git: bool) -> Result<(), VersionControlError> {
         match self {
             Self::Git => {
                 let Ok(git) = GIT.as_ref() else {
@@ -84,14 +87,20 @@ impl VersionControlSystem {
                     Err(_) => return Err(VersionControlError::JjNotInstalled),
                 };
 
-                let output = Command::new(jj)
+                let mut command = Command::new(jj);
+                command
                     .arg("git")
                     .arg("init")
                     .current_dir(path)
                     .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output()
-                    .map_err(VersionControlError::JjCommand)?;
+                    .stderr(Stdio::piped());
+
+                // If colocating with an existing Git repo, use --colocate flag
+                if colocate_with_git {
+                    command.arg("--colocate");
+                }
+
+                let output = command.output().map_err(VersionControlError::JjCommand)?;
                 if !output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     let stderr = String::from_utf8_lossy(&output.stderr);
